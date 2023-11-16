@@ -1,5 +1,6 @@
 use wasmparser::{Parser, Payload};
 use crate::error::Result;
+use gimli::{DebugAbbrev, DebugInfo, DebugLine, LittleEndian};
 
 pub fn parse_wasm(wasm_contents: &[u8]) -> Result<()> {
     let parser = Parser::new(0);
@@ -23,4 +24,18 @@ pub fn parse_wasm(wasm_contents: &[u8]) -> Result<()> {
 
 fn is_dwarf_section(name: &str) -> bool {
     matches!(name, ".debug_info" | ".debug_line" | ".debug_abbrev" | ".debug_str" | ".debug_ranges" | ".debug_pubtypes" | ".debug_pubnames")
+}
+
+fn handle_dwarf_section(name: &str, data: &[u8]) -> Result<()> {
+    match name {
+        ".debug_info" => {
+            let debug_info = DebugInfo::new(data, LittleEndian);
+        },
+        ".debug_line" => {
+            let debug_line = DebugLine::new(data, LittleEndian);
+        },
+        _ => {}
+    }
+
+    Ok(())
 }
