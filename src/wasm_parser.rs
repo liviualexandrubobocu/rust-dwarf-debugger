@@ -9,7 +9,9 @@ pub fn parse_wasm(wasm_contents: &[u8]) -> Result<()> {
                 println!("WASM Version: {}, Range {:?}", num, range);
             },
             Payload::CustomSection { name, data_offset, data, range } => {
-                println!("Custom Section: {}, Range: {:?}", name, range);
+                if is_dwarf_section(name) {
+                    println!("Found DWARF section: {}, Range: {:?}", name, range);
+                }
             },
             _ => {}
 
@@ -17,4 +19,8 @@ pub fn parse_wasm(wasm_contents: &[u8]) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn is_dwarf_section(name: &str) -> bool {
+    matches!(name, ".debug_info" | ".debug_line" | ".debug_abbrev" | ".debug_str" | ".debug_ranges" | ".debug_pubtypes" | ".debug_pubnames")
 }
