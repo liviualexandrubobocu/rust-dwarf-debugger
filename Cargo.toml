@@ -7,4 +7,4 @@ edition = "2021"
 
 [dependencies]
 wasmparser="0.82.0"
-thiserror="1.0"
+thiserror= { version = "1.0", features = [] }

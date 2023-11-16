@@ -1,29 +1,34 @@
+
 mod wasm_parser;
-
+mod error;
 use std::env;
+use std::ffi::OsString;
 use std::fs;
-use std::io::{self, Read};
 
-fn main() -> io::Result<()> {
-    // WASM file from CMD line args
+use std::io::Read;
+use error::Result;
+
+fn main() -> Result<()> {
+    let wasm_file_path = get_wasm_file_path()?;
+    let wasm_contents = read_wasm_file(&wasm_file_path)?;
+    wasm_parser::parse_wasm(&wasm_contents)?;
+
+    Ok(())
+}
+
+fn get_wasm_file_path() -> Result<String>{
     let args: Vec<String> = env::args().collect();
-
     if args.len() != 2 {
-        eprintln!("Usage {} <wasm_file>,", args[0]);
-        std::process::exit(1);
+        Err(error::Error::Usage)
+    } else {
+        Ok(args[1].clone())
     }
+}
 
-    let wasm_file_path = &args[1];
-
-    // Read WASM file
-    let mut file = fs::File::open(wasm_file_path)?;
+fn read_wasm_file(path: &str) -> Result<Vec<u8>> {
+    let mut file = fs::File::open(path)?;
     let mut wasm_contents = Vec::new();
     file.read_to_end(&mut wasm_contents)?;
 
-    if wasm_contents.starts_with(b"\0asm") {
-        println!(" Valid WASM file");
-        std::process::exit(1);
-    }
-
-    Ok(())
+    Ok(wasm_contents)
 }
