@@ -1,6 +1,8 @@
 
 mod wasm_parser;
 mod error;
+mod debug_data;
+
 use std::env;
 use std::ffi::OsString;
 use std::fs;
