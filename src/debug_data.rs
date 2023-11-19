@@ -12,7 +12,7 @@ pub struct Variable {
     pub address: Option<u64>,
 }
 
-pub struct DebugInfo {
+pub struct DebugInfoStorage {
     pub functions: Vec<Function>,
     pub global_variables: Vec<Variable>
 }
