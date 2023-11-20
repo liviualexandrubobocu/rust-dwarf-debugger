@@ -4,16 +4,26 @@ mod error;
 mod debug_data;
 
 use std::env;
-use std::ffi::OsString;
 use std::fs;
 
 use std::io::Read;
 use error::Result;
 
+use object::{Object, ObjectSection};
+
 fn main() -> Result<()> {
-    let wasm_file_path = get_wasm_file_path()?;
-    let wasm_contents = read_wasm_file(&wasm_file_path)?;
-    wasm_parser::parse_wasm(&wasm_contents)?;
+    for path in env::args().skip(1) {
+        let file = fs::File::open(&path).unwrap();
+        let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
+        let object = object::File::parse(&*mmap).unwrap();
+        let endian = if object.is_little_endian() {
+            gimli::RunTimeEndian::Little
+        } else {
+            gimli::RunTimeEndian::Big
+        };
+        wasm_parser::parse_wasm(&object, endian).unwrap();
+
+    }
 
     Ok(())
 }

@@ -8,6 +8,8 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
+    Gimli(#[from] gimli::Error),
+    #[error(transparent)]
     WasmParse(#[from] wasmparser::BinaryReaderError)
 }
 
