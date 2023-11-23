@@ -1,8 +1,11 @@
 use std::borrow;
+use std::collections::HashMap;
 use wasmparser::{Parser, Payload};
 use crate::error::Result;
 use gimli::{DebugAbbrev, DebugInfo, DebugLine, LittleEndian, UnitOffset, AttributeValue, DebuggingInformationEntry, EndianSlice, EntriesTreeNode, constants};
 use crate::debug_data::{DebugInfoStorage, Function, Variable};
+use crate::source_maps::{SourceMap, SourceMapping};
+
 pub fn parse_wasm(wasm_contents: &[u8]) -> Result<()> {
     let parser = Parser::new(0);
     for payload in parser.parse_all(wasm_contents){
@@ -33,7 +36,7 @@ fn handle_dwarf_section(name: &str, data: &[u8]) -> Result<()> {
             let _debug_info = parse_debug_info_section(data);
         },
         ".debug_line" => {
-            let _debug_line = DebugLine::new(data, LittleEndian);
+            let _debug_line = parse_debug_line_section(data);
         },
         _ => {}
     }
@@ -187,4 +190,26 @@ fn parse_variable(entry: &DebuggingInformationEntry<EndianSlice<LittleEndian>>) 
         address
     })
 
+}
+
+fn parse_debug_line_section(data: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+    let debug_line = DebugLine::new(data, LittleEndian);
+
+    let mut state_machine = debug_line.rows();
+    while let Some((header, row)) = state_machine.next_row()? {
+        println!("Address: {}, File: {}, Line: {}", row.address(), row.file(header)?.path_name().to_string_lossy()?, row.line()?);
+        let address = row.address();
+        let mut state = GLOBAL_STATE.lock();
+
+        if let Some(&(ref file, line)) = state.function_addresses.get(&address) {
+            source_map.mappings.push(SourceMapping {
+                wasm_address: address,
+                source_file: file.clone(),
+                line: line,
+                column: row.column().unwrap_or(0) as u32
+            })
+        }
+    }
+
+    Ok(())
 }

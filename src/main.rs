@@ -2,6 +2,8 @@
 mod wasm_parser;
 mod error;
 mod debug_data;
+mod source_maps;
+mod state_management;
 
 use std::env;
 use std::fs;
