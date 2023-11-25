@@ -1,0 +1,15 @@
+enum SymbolInfo {
+    ClassOrStruct(ClassOrStructInfo),
+    Function(FunctionInfo),
+    Variable(VariableInfo),
+    Enum(EnumInfo),
+    Typedef(TypedefInfo),
+    Constant(ConstantInfo),
+    Namespace(NamespaceInfo),
+    Template(TemplateInfo),
+    SourceFile(SourceFileInfo),
+    Label(LabelInfo),
+    LineNumber(LineNumberInfo),
+    CompileUnit(CompileUnitInfo),
+    GlobalVariable(GlobalVariableInfo),
+}
