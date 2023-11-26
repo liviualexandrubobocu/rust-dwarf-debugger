@@ -1,6 +1,6 @@
 use gimli::{DebuggingInformationEntry, Dwarf, Reader, Unit, Error};
 
-fn process_class_or_struct<R: Reader<Offset = usize>>(
+pub fn parse_class_or_struct<R: Reader<Offset = usize>>(
     entry: &DebuggingInformationEntry<R>,
     dwarf: &Dwarf<R>,
     unit: &Unit<R>
