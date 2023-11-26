@@ -23,7 +23,7 @@ fn main() -> Result<()> {
         } else {
             gimli::RunTimeEndian::Big
         };
-        wasm_parser::parse_wasm(&object, endian).unwrap();
+        wasm_parser::parse_wasm(&mmap, &object, endian).unwrap();
 
     }
 

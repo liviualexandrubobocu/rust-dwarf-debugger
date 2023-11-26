@@ -1,12 +1,13 @@
 use std::borrow;
-use std::collections::HashMap;
 use wasmparser::{Parser, Payload};
 use crate::error::Result;
 use gimli::{DebugAbbrev, DebugInfo, DebugLine, LittleEndian, UnitOffset, AttributeValue, DebuggingInformationEntry, EndianSlice, EntriesTreeNode, constants};
+use object::{Object, ObjectSection};
 use crate::debug_data::{DebugInfoStorage, Function, Variable};
-use crate::source_maps::{SourceMap, SourceMapping};
+use crate::source_maps::{SourceMapping};
 
-pub fn parse_wasm(wasm_contents: &[u8]) -> Result<()> {
+pub fn parse_wasm(wasm_contents: &[u8],  object: &object::File,
+                  endian: gimli::RunTimeEndian) -> Result<()> {
     let parser = Parser::new(0);
     for payload in parser.parse_all(wasm_contents){
         match payload? {
@@ -15,7 +16,7 @@ pub fn parse_wasm(wasm_contents: &[u8]) -> Result<()> {
             },
             Payload::CustomSection { name, data_offset: _data_offset, data: _data, range } => {
                 if is_dwarf_section(name) {
-                    let result = handle_dwarf_section(name, _data);
+                    let result = handle_dwarf_section(name, _data, object, endian);
                 }
             },
             _ => {}
@@ -30,13 +31,13 @@ fn is_dwarf_section(name: &str) -> bool {
     matches!(name, ".debug_info" | ".debug_line" | ".debug_abbrev" | ".debug_str" | ".debug_ranges" | ".debug_pubtypes" | ".debug_pubnames")
 }
 
-fn handle_dwarf_section(name: &str, data: &[u8]) -> Result<()> {
+fn handle_dwarf_section(name: &str, data: &[u8], object: &object::File, endianness: gimli::RunTimeEndian) -> Result<()> {
     match name {
         ".debug_info" => {
-            let _debug_info = parse_debug_info_section(data);
+            let _debug_info = parse_debug_info_section(data, object, endianness);
         },
         ".debug_line" => {
-            let _debug_line = parse_debug_line_section(data);
+            let _debug_line = parse_debug_line_section(data, endianness);
         },
         _ => {}
     }
@@ -44,13 +45,13 @@ fn handle_dwarf_section(name: &str, data: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn parse_debug_info_section(data: &[u8]) -> Result<()> {
-    let debug_info = DebugInfo::new(data, LittleEndian);
+fn parse_debug_info_section(data: &[u8], object: &object::File, endianness: gimli::RunTimeEndian) -> Result<()> {
+    let debug_info = DebugInfo::new(data, endianness);
     let mut debug_info_storage = DebugInfoStorage {
         functions: Vec::new(),
         global_variables: Vec::new()
     };
-    let debug_abbrev = DebugAbbrev::new(data, LittleEndian);
+    let debug_abbrev = DebugAbbrev::new(data, endianness);
     let mut iter = debug_info.units();
     while let Some(unitHeader) = iter.next()? {
         println!("found a compilation unit. length {}", unitHeader.unit_length());
@@ -74,7 +75,7 @@ fn parse_debug_info_section(data: &[u8]) -> Result<()> {
         let borrow_section: &dyn for<'a> Fn(
             &'a borrow::Cow<[u8]>,
         ) -> gimli::EndianSlice<'a, gimli::RunTimeEndian> =
-            &|section| gimli::EndianSlice::new(&*section, endian);
+            &|section| gimli::EndianSlice::new(&*section, endianness);
 
         // Create `EndianSlice`s for all of the sections.
         let dwarf = dwarf_cow.borrow(&borrow_section);
@@ -192,8 +193,8 @@ fn parse_variable(entry: &DebuggingInformationEntry<EndianSlice<LittleEndian>>) 
 
 }
 
-fn parse_debug_line_section(data: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
-    let debug_line = DebugLine::new(data, LittleEndian);
+fn parse_debug_line_section(data: &[u8], endianess: gimli::RunTimeEndian) -> Result<(), Box<dyn std::error::Error>> {
+    let debug_line = DebugLine::new(data, endianess);
 
     let mut state_machine = debug_line.rows();
     while let Some((header, row)) = state_machine.next_row()? {
