@@ -1,8 +1,9 @@
 use std::borrow;
+use std::ops::Deref;
 use wasmparser::{Parser, Payload};
 use crate::error::Result;
-use gimli::{DebugAbbrev, DebugInfo, DebugLine, LittleEndian, UnitOffset, AttributeValue, DebuggingInformationEntry, EndianSlice, EntriesTreeNode, constants};
-use object::{Object, ObjectSection};
+use gimli::{DebugAbbrev, DebugInfo, DebugLine, LittleEndian, UnitOffset, AttributeValue, DebuggingInformationEntry, EndianSlice, EntriesTreeNode, constants, RunTimeEndian, BigEndian};
+use object::{Endian, Object, ObjectSection};
 use crate::debug_data::{DebugInfoStorage, Function, Variable};
 use crate::source_maps::{SourceMapping};
 
@@ -37,7 +38,7 @@ fn handle_dwarf_section(name: &str, data: &[u8], object: &object::File, endianne
             let _debug_info = parse_debug_info_section(data, object, endianness);
         },
         ".debug_line" => {
-            let _debug_line = parse_debug_line_section(data, endianness);
+            //let _debug_line = parse_debug_line_section(data, endianness);
         },
         _ => {}
     }
@@ -45,7 +46,7 @@ fn handle_dwarf_section(name: &str, data: &[u8], object: &object::File, endianne
     Ok(())
 }
 
-fn parse_debug_info_section(data: &[u8], object: &object::File, endianness: gimli::RunTimeEndian) -> Result<()> {
+fn parse_debug_info_section(data: &[u8], object: &object::File, endianness: gimli::RunTimeEndian) -> Result<(), Box<dyn std::error::Error>> {
     let debug_info = DebugInfo::new(data, endianness);
     let mut debug_info_storage = DebugInfoStorage {
         functions: Vec::new(),
@@ -80,48 +81,64 @@ fn parse_debug_info_section(data: &[u8], object: &object::File, endianness: giml
         // Create `EndianSlice`s for all of the sections.
         let dwarf = dwarf_cow.borrow(&borrow_section);
 
-        let mut tree = unit.root();
-        parse_die_tree(&mut tree, &mut debug_info_storage)?;
-    }
+        let mut iter = dwarf.units();
+        while let Some(header) = iter.next()? {
+            println!(
+                "Unit at <.debug_info+0x{:x}>",
+                header.offset().as_debug_info_offset().unwrap().0
+            );
+            let unit = dwarf.unit(header)?;
 
-    Ok(())
-}
+            // Iterate over the Debugging Information Entries (DIEs) in the unit.
+            let mut depth = 0;
+            let mut entries = unit.entries();
+            while let Some((delta_depth, entry)) = entries.next_dfs()? {
+                depth += delta_depth;
+                println!("<{}><{:x}> {}", depth, entry.offset().0, entry.tag());
+                parse_entry(data, entry, &mut debug_info_storage)?;
 
 
-fn parse_die_tree(tree: &mut EntriesTreeNode<EndianSlice<LittleEndian>>, debug_info_storage: &mut DebugInfoStorage) -> Result<()> {
-    let mut children = tree.children();
-
-    while let Some(child) = children.next()? {
-        println!("DIE: {:?}", child.entry().tag());
-        match child.entry().tag() {
-            constants::DW_TAG_subprogram => {
-                let function = parse_function(child.entry())?;
-                debug_info_storage.functions.push(function);
-            },
-            constants::DW_TAG_variable => {
-                let variable = parse_variable(child.entry())?;
-                debug_info_storage.global_variables.push(variable);
-            },
-            _ => {}
-        }
-        for attribute in child.entry().attrs().next()? {
-            match attribute.value() {
-                AttributeValue::DebugStrRef(_offset) => {
-
-                },
-                AttributeValue::Addr(_addr) => {
-
-                },
-                _ => {}
-
+                // Iterate over the attributes in the DIE.
+                let mut attrs = entry.attrs();
+                while let Some(attr) = attrs.next()? {
+                    println!("   {}: {:?}", attr.name(), attr.value());
+                }
             }
         }
+
     }
 
     Ok(())
 }
 
-fn parse_function(entry: &DebuggingInformationEntry<EndianSlice<LittleEndian>>) -> Result<Function> {
+
+fn parse_entry<R: gimli::Reader>(data: &[u8], entry: &DebuggingInformationEntry<R> , debug_info_storage: &mut DebugInfoStorage) -> Result<(), Box<dyn std::error::Error>> {
+    match entry.tag() {
+        constants::DW_TAG_subprogram => {
+            let function = parse_function(entry)?;
+            debug_info_storage.functions.push(function);
+        },
+        constants::DW_TAG_variable => {
+            let variable = parse_variable(entry)?;
+            debug_info_storage.global_variables.push(variable);
+        },
+        _ => {}
+    }
+    for attribute in entry.attrs().next()? {
+        match attribute.value() {
+            AttributeValue::DebugStrRef(_offset) => {
+            },
+            AttributeValue::Addr(_addr) => {
+            },
+            _ => {}
+
+        }
+    }
+
+    Ok(())
+}
+
+fn parse_function<R: gimli::Reader>(entry: &DebuggingInformationEntry<R>) -> Result<Function> {
     let mut name = None;
     let mut address = None;
     let mut size = None;
@@ -131,7 +148,7 @@ fn parse_function(entry: &DebuggingInformationEntry<EndianSlice<LittleEndian>>) 
         match attr.name() {
             gimli::DW_AT_name => {
                 if let AttributeValue::String(value) = attr.value() {
-                    name = Some(value.to_string()?);
+                    name = Some(value.to_string());
                 }
             },
             gimli::DW_AT_low_pc => {
@@ -148,8 +165,9 @@ fn parse_function(entry: &DebuggingInformationEntry<EndianSlice<LittleEndian>>) 
         }
     }
 
-     Ok(Function {
-         name: name.unwrap_or_default().parse().unwrap(),
+
+    Ok(Function {
+         name: String::new(),
          address: address.unwrap_or(0),
          size: size.unwrap_or(0),
          parameters: Vec::new(),
@@ -157,7 +175,7 @@ fn parse_function(entry: &DebuggingInformationEntry<EndianSlice<LittleEndian>>) 
      })
 }
 
-fn parse_variable(entry: &DebuggingInformationEntry<EndianSlice<LittleEndian>>) -> Result<Variable> {
+fn parse_variable<R: gimli::Reader>(entry: &DebuggingInformationEntry<R>) -> Result<Variable> {
     let mut name = None;
     let mut var_type = None;
     let mut address = None;
@@ -186,31 +204,31 @@ fn parse_variable(entry: &DebuggingInformationEntry<EndianSlice<LittleEndian>>) 
     }
 
     Ok(Variable {
-        name: name.unwrap_or_default().parse().unwrap(),
+        name: String::new(),
         var_type: var_type.unwrap_or_default(),
         address
     })
 
 }
 
-fn parse_debug_line_section(data: &[u8], endianess: gimli::RunTimeEndian) -> Result<(), Box<dyn std::error::Error>> {
-    let debug_line = DebugLine::new(data, endianess);
-
-    let mut state_machine = debug_line.rows();
-    while let Some((header, row)) = state_machine.next_row()? {
-        println!("Address: {}, File: {}, Line: {}", row.address(), row.file(header)?.path_name().to_string_lossy()?, row.line()?);
-        let address = row.address();
-        let mut state = GLOBAL_STATE.lock();
-
-        if let Some(&(ref file, line)) = state.function_addresses.get(&address) {
-            source_map.mappings.push(SourceMapping {
-                wasm_address: address,
-                source_file: file.clone(),
-                line: line,
-                column: row.column().unwrap_or(0) as u32
-            })
-        }
-    }
-
-    Ok(())
-}
+// fn parse_debug_line_section(data: &[u8], endianess: gimli::RunTimeEndian) -> Result<(), Box<dyn std::error::Error>> {
+//     let debug_line = DebugLine::new(data, endianess);
+//
+//     let mut state_machine = debug_line.rows();
+//     while let Some((header, row)) = state_machine.next_row()? {
+//         println!("Address: {}, File: {}, Line: {}", row.address(), row.file(header)?.path_name().to_string_lossy()?, row.line()?);
+//         let address = row.address();
+//         let mut state = GLOBAL_STATE.lock();
+//
+//         if let Some(&(ref file, line)) = state.function_addresses.get(&address) {
+//             source_map.mappings.push(SourceMapping {
+//                 wasm_address: address,
+//                 source_file: file.clone(),
+//                 line: line,
+//                 column: row.column().unwrap_or(0) as u32
+//             })
+//         }
+//     }
+//
+//     Ok(())
+// }

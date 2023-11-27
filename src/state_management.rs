@@ -22,5 +22,5 @@ impl SharedState {
 }
 
 lazy_static! {
-    static ref GLOBAL_STATE: Mutex<SharedState> = Mutex::new(SharedState::new())
+    static ref GLOBAL_STATE: Mutex<SharedState> = Mutex::new(SharedState::new());
 }
