@@ -1,5 +1,4 @@
 use std::borrow;
-use std::ops::Deref;
 use wasmparser::{Parser, Payload};
 use crate::error::Result;
 use gimli::{DebugAbbrev, DebugInfo, DebugLine, LittleEndian, UnitOffset, AttributeValue, DebuggingInformationEntry, EndianSlice, EntriesTreeNode, constants, RunTimeEndian, BigEndian};
