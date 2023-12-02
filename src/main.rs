@@ -19,18 +19,10 @@ use std::io::Write;
 use std::path::Path;
 use std::io::{self, BufRead};
 
+
 fn main() -> Result<()> {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        eprintln!("Usage: {} <file_path>", args[0]);
-        std::process::exit(1);
-    }
-
-    let path = &args[1];
-    println!("Processing file: {}", path);
-
     let output = Command::new("wasm-tools")
-        .args(["dump", "C:\\Users\\liviu\\RustroverProjects\\rust-dwarf-debugger\\src\\bitpack.wasm"])
+        .args(["print", "-p",  "C:\\Users\\liviu\\RustroverProjects\\rust-dwarf-debugger\\src\\test_wasm.wasm"])
         .output()
         .expect("Failed to execute command");
 
@@ -56,31 +48,6 @@ fn main() -> Result<()> {
     // wasm-tools dump /filename used to obtain dump
     // wasm-tools addr2line -- C:\\Users\\liviu\\RustroverProjects\\rust-dwarf-debugger\\src\\bitpack.wasm 0x110e2 used to map back information to debug lines
 
-    // let object = object::File::parse(file).unwrap();
-    // let endian = if object.is_little_endian() {
-    //     gimli::RunTimeEndian::Little
-    // } else {
-    //     gimli::RunTimeEndian::Big
-    // };
-    //wasm_parser::parse_wasm(, &object, endian).unwrap();
-
 
     Ok(())
-}
-
-fn get_wasm_file_path() -> Result<String>{
-    let args: Vec<String> = env::args().collect();
-    if args.len() != 2 {
-        Err(error::Error::Usage)
-    } else {
-        Ok(args[1].clone())
-    }
-}
-
-fn read_wasm_file(path: &str) -> Result<Vec<u8>> {
-    let mut file = fs::File::open(path)?;
-    let mut wasm_contents = Vec::new();
-    file.read_to_end(&mut wasm_contents)?;
-
-    Ok(wasm_contents)
 }
