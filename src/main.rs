@@ -65,8 +65,9 @@ fn main() -> Result<()> {
 
     parse_wasm_header(&data)?;
 
+    wasm_parser::parse_wasm2(&data).unwrap();
 
-    wasm_parser::parse_wasm(&data, &mmap, LittleEndian).unwrap();
+   // wasm_parser::parse_wasm(&data, &mmap, LittleEndian).unwrap();
     Ok(())
 }
 
