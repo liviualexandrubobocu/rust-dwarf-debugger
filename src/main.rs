@@ -12,7 +12,7 @@ use std::fs;
 use std::io::Read;
 use error::Result;
 
-use object::{Object, File as ObjectFile, ObjectSection};
+use object::{Object, ObjectSection};
 
 use std::process::Command;
 use std::fs::File;
@@ -52,7 +52,7 @@ fn main() -> Result<()> {
     // wasm-tools dump /filename used to obtain dump
     // wasm-tools addr2line -- C:\\Users\\liviu\\RustroverProjects\\rust-dwarf-debugger\\src\\bitpack.wasm 0x110e2 used to map back information to debug lines
 
-    let file_path = "C:\\Users\\liviu\\RustroverProjects\\rust-dwarf-debugger\\src\\bitpack.wasm"; // replace with your file path
+    let file_path = "C:\\Users\\liviu\\RustroverProjects\\rust-dwarf-debugger\\src\\test_wasm.wasm"; // replace with your file path
     let data = read_wasm_file(file_path)?;
 
     let mut file = File::open(file_path)?;
