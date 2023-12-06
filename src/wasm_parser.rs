@@ -1,42 +1,43 @@
-use std::borrow;
 use std::error::Error;
-use std::rc::Rc;
 use wasmparser::{Parser, Payload};
 use crate::error::Result;
-use gimli::{DebugAddr, DebugAranges, DebugLineStr, DebugLoc, DebugLocLists, DebugRanges, DebugRngLists, DebugStr, DebugStrOffsets, DebugTypes, DebugFrame, EhFrame, DebugAbbrev, DebugInfo, DebugLine, LittleEndian, UnitOffset, AttributeValue, DebuggingInformationEntry, EndianSlice, EntriesTreeNode, constants, RunTimeEndian, BigEndian, Dwarf, Reader, Unit, RangeLists, LocationLists};
-use memmap2::Mmap;
-use object::{Endian, File, Object, ObjectSection};
+use gimli::{DebugAddr, DebugAranges, DebugLineStr, DebugStr, DebugStrOffsets, DebugTypes, DebugAbbrev, DebugInfo, DebugLine, LittleEndian, AttributeValue, DebuggingInformationEntry, EndianSlice, EntriesTreeNode, constants, RunTimeEndian, BigEndian, Dwarf, Reader, Unit, RangeLists, LocationLists};
+use object::{Object, ObjectSection};
 use crate::debug_data::{DebugInfoStorage, Function, Variable};
-use crate::source_maps::{SourceMapping};
-
-// pub fn parse_wasm(wasm_contents: &[u8], object: &Mmap,
-//                   endian: LittleEndian) -> Result<()> {
-//     let parser = Parser::new(0);
-//     for payload in parser.parse_all(wasm_contents){
-//         match payload? {
-//             Payload::Version { num, range } => {
-//                 println!("WASM Version: {}, Range {:?}", num, range);
-//             },
-//             Payload::CustomSection { name, data_offset: _data_offset, data: _data, range } => {
-//                 if is_dwarf_section(name) {
-//                     let result = handle_dwarf_section(name, _data, &object, endian);
-//                 }
-//             },
-//             _ => {}
-//
-//         }
-//     }
-//
-//     Ok(())
-// }
-
 
 pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
     let parser = Parser::new(0);
     let parser2 = Parser::new(0);
-    let mut dwarf = Dwarf {
-        debug_abbrev: DebugAbbrev::from(EndianSlice::new(&[], LittleEndian)),
-        debug_info: DebugInfo::from(EndianSlice::new(&[], LittleEndian)),
+    let mut parsed_debug_info = DebugInfo::from(EndianSlice::new(&[], LittleEndian));
+    let mut parsed_debug_abbrev = DebugAbbrev::from(EndianSlice::new(&[], LittleEndian));
+
+    for payload in parser.parse_all(wasm_contents) {
+        {
+            match payload? {
+                Payload::CustomSection { name, data, .. } => {
+                    if name == ".debug_info" {
+                        {
+                            let endian = LittleEndian; // Assuming the file uses little-endian format
+                            let debug_info = DebugInfo::new(data, endian);
+                            parsed_debug_info = debug_info;
+                        }
+                    }
+                    if name == ".debug_abbrev" {
+                        {
+                            let endian = LittleEndian; // Assuming the file uses little-endian format
+                            let debug_abbrev = DebugAbbrev::new(data, endian);
+                            parsed_debug_abbrev = debug_abbrev;
+                        }
+                    }
+                },
+                _ => ()
+            }
+        }
+    }
+
+    let dwarf = Dwarf {
+        debug_abbrev: parsed_debug_abbrev,
+        debug_info: parsed_debug_info,
         debug_addr: DebugAddr::from(EndianSlice::new(&[], LittleEndian)),
         debug_aranges: DebugAranges::from(EndianSlice::new(&[], LittleEndian)),
         debug_line: DebugLine::from(EndianSlice::new(&[], LittleEndian)),
@@ -47,35 +48,19 @@ pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn std::error::Error
         file_type: Default::default(),
         ranges: RangeLists::new(Default::default(), Default::default()),
         locations: LocationLists::new(Default::default(), Default::default()),
-        sup: None,
+        sup: None
     };
 
-    {
-        let dwarf_ref = &mut dwarf;
-       // parse_debug_info_section(wasm_contents, dwarf_ref);
-    }
-        let dwarf_ref3 = &dwarf;
-        parse(wasm_contents, dwarf_ref3);
-
-
-
-
-
-    Ok(())
-}
-
-fn parse<'a>(wasm_contents: &'a [u8], dwarf: &'a Dwarf<EndianSlice<'a, LittleEndian>>) -> Result<(), Box<dyn std::error::Error>> {
-    let parser = Parser::new(0);
-    for payload in parser.parse_all(wasm_contents) {
+    for payload in parser2.parse_all(wasm_contents) {
         {
             match payload? {
                 Payload::CustomSection { name, data, .. } => {
                     if name == ".debug_info" {
                         let mut iter = dwarf.units();
                         while let Some(header) = iter.next()? {
-                            let unit = dwarf.unit(header)?;
-                            println!("{:?}", unit.name.unwrap().to_string());
-                            parse_dwarf_unit(&unit, dwarf)?;
+                            let unit = Unit::new(&dwarf,header).unwrap();
+                            println!("{:?}", unit);
+                            //parse_dwarf_unit(&unit, &dwarf)?;
                         }
                     }
                 },
@@ -85,32 +70,11 @@ fn parse<'a>(wasm_contents: &'a [u8], dwarf: &'a Dwarf<EndianSlice<'a, LittleEnd
         }
 
     }
+
     Ok(())
 }
 
 
-fn parse_debug_info_section(wasm_contents: &[u8], dwarf: &mut Dwarf<EndianSlice<LittleEndian>>) -> Result<(), Box<dyn std::error::Error>> {
-    let parser = Parser::new(0);
-    for payload in parser.parse_all(wasm_contents) {
-        {
-            match payload? {
-                Payload::CustomSection { name, data, .. } => {
-                    if name == ".debug_info" {
-                        {
-                            let endian = LittleEndian; // Assuming the file uses little-endian format
-                            let debug_info = DebugInfo::new(data, endian);
-                            dwarf.debug_info = debug_info;
-                        }
-                    }
-                },
-                // ... handle other sections ...
-                _ => {}
-            }
-        }
-    }
-    Ok(())
-
-}
 fn parse_abbrev_info_section<'a>(data: &'a [u8], dwarf: &'a mut gimli::Dwarf<EndianSlice<'a, LittleEndian>>) -> Result<(), Box<dyn std::error::Error>> {
     let endian = LittleEndian; // Assuming the file uses little-endian format
     let debug_abbrev = DebugAbbrev::new(data, endian);
