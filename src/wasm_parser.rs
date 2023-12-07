@@ -8,27 +8,66 @@ use crate::debug_data::{DebugInfoStorage, Function, Variable};
 pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
     let parser = Parser::new(0);
     let parser2 = Parser::new(0);
-    let mut parsed_debug_info = DebugInfo::from(EndianSlice::new(&[], LittleEndian));
-    let mut parsed_debug_abbrev = DebugAbbrev::from(EndianSlice::new(&[], LittleEndian));
+    let mut parsed_debug_info = Some(DebugInfo::from(EndianSlice::new(&[], LittleEndian)));
+    let mut parsed_debug_abbrev = Some(DebugAbbrev::from(EndianSlice::new(&[], LittleEndian)));
+    let mut parsed_debug_addr = Some(DebugAddr::from(EndianSlice::new(&[], LittleEndian)));
+    let mut parsed_debug_line =  Some(DebugLine::from(EndianSlice::new(&[], LittleEndian)));
+    let mut parsed_debug_aranges = Some(DebugAranges::from(EndianSlice::new(&[], LittleEndian)));
+    let mut parsed_debug_str = Some(DebugStr::from(EndianSlice::new(&[], LittleEndian)));
+    let mut parsed_debug_str_offsets = Some(DebugStrOffsets::from(EndianSlice::new(&[], LittleEndian)));
+    let mut parsed_ranged_lists = Some(RangeLists::new(Default::default(), Default::default()));
+    let mut parsed_debug_loc = Some(LocationLists::new(Default::default(), Default::default()));
+    let mut parsed_debug_types = Some(DebugTypes::from(EndianSlice::new(&[], LittleEndian)));
+    let mut parsed_debug_line_str = Some(DebugLineStr::from(EndianSlice::new(&[], LittleEndian)));
 
     for payload in parser.parse_all(wasm_contents) {
         {
             match payload? {
                 Payload::CustomSection { name, data, .. } => {
-                    if name == ".debug_info" {
-                        {
-                            let endian = LittleEndian; // Assuming the file uses little-endian format
+                    let endian = LittleEndian;
+
+                    match name {
+                        ".debug_info" => {
                             let debug_info = DebugInfo::new(data, endian);
-                            parsed_debug_info = debug_info;
+                            parsed_debug_info = Some(debug_info);
                         }
-                    }
-                    if name == ".debug_abbrev" {
-                        {
-                            let endian = LittleEndian; // Assuming the file uses little-endian format
+                        ".debug_abbrev" => {
                             let debug_abbrev = DebugAbbrev::new(data, endian);
-                            parsed_debug_abbrev = debug_abbrev;
+                            parsed_debug_abbrev = Some(debug_abbrev);
                         }
+                        ".debug_line" => {
+                            let debug_line = DebugLine::new(data, endian);
+                            parsed_debug_line = Some(debug_line);
+                        }
+                        ".debug_line_str" => {
+                            let debug_line_str = DebugLineStr::new(data, endian);
+                            parsed_debug_line_str = Some(debug_line_str);
+                        }
+                        ".debug_aranges" => {
+                            let debug_aranges = DebugAranges::new(data, endian);
+                            parsed_debug_aranges = Some(debug_aranges);
+                        }
+                        ".debug_str" => {
+                            let debug_str = DebugStr::new(data, endian);
+                            parsed_debug_str = Some(debug_str);
+                        }
+                        ".debug_str_offsets" => {
+                            let debug_str_offsets = DebugStrOffsets::from(EndianSlice::new(data, LittleEndian));
+                            parsed_debug_str_offsets = Some(debug_str_offsets);
+                        }
+                        ".debug_loc" => {
+                            // Assuming DebugLoc type exists and has a constructor similar to others
+                            let debug_loc = LocationLists::new(Default::default(), Default::default());
+                            parsed_debug_loc = Some(debug_loc);
+                        }
+                        ".debug_types" => {
+                            // Assuming DebugTypes type exists and has a constructor similar to others
+                            let debug_types = DebugTypes::new(data, endian);
+                            parsed_debug_types = Some(debug_types);
+                        }
+                        _ => ()
                     }
+
                 },
                 _ => ()
             }
@@ -36,18 +75,18 @@ pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn std::error::Error
     }
 
     let dwarf = Dwarf {
-        debug_abbrev: parsed_debug_abbrev,
-        debug_info: parsed_debug_info,
-        debug_addr: DebugAddr::from(EndianSlice::new(&[], LittleEndian)),
-        debug_aranges: DebugAranges::from(EndianSlice::new(&[], LittleEndian)),
-        debug_line: DebugLine::from(EndianSlice::new(&[], LittleEndian)),
-        debug_line_str: DebugLineStr::from(EndianSlice::new(&[], LittleEndian)),
-        debug_str: DebugStr::from(EndianSlice::new(&[], LittleEndian)),
-        debug_str_offsets: DebugStrOffsets::from(EndianSlice::new(&[], LittleEndian)),
-        debug_types: DebugTypes::from(EndianSlice::new(&[], LittleEndian)),
+        debug_abbrev: parsed_debug_abbrev.unwrap(),
+        debug_info: parsed_debug_info.unwrap(),
+        debug_addr: parsed_debug_addr.unwrap(),
+        debug_aranges: parsed_debug_aranges.unwrap(),
+        debug_line: parsed_debug_line.unwrap(),
+        debug_line_str: parsed_debug_line_str.unwrap(),
+        debug_str: parsed_debug_str.unwrap(),
+        debug_str_offsets: parsed_debug_str_offsets.unwrap(),
+        debug_types: parsed_debug_types.unwrap(),
         file_type: Default::default(),
-        ranges: RangeLists::new(Default::default(), Default::default()),
-        locations: LocationLists::new(Default::default(), Default::default()),
+        ranges: parsed_ranged_lists.unwrap(),
+        locations: parsed_debug_loc.unwrap(),
         sup: None
     };
 
