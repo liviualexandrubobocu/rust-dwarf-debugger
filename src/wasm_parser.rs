@@ -1,5 +1,5 @@
 use std::error::Error;
-use wasmparser::{Parser, Payload};
+use wasmparser::{Parser, Payload, SectionReader, FunctionSectionReader, CodeSectionReader, Operator};
 use crate::error::Result;
 use gimli::{DebugAddr, DebugAranges, DebugLineStr, DebugStr, DebugStrOffsets, DebugTypes, DebugAbbrev, DebugInfo, DebugLine, LittleEndian, AttributeValue, DebuggingInformationEntry, EndianSlice, EntriesTreeNode, constants, RunTimeEndian, BigEndian, Dwarf, Reader, Unit, RangeLists, LocationLists};
 use object::{Object, ObjectSection};
@@ -90,20 +90,72 @@ pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn std::error::Error
         sup: None
     };
 
+    let mut function_type_indices = Vec::new();
+
     for payload in parser2.parse_all(wasm_contents) {
         {
             match payload? {
                 Payload::CustomSection { name, data, .. } => {
-                    if name == ".debug_info" {
-                        let mut iter = dwarf.units();
-                        while let Some(header) = iter.next()? {
-                            let unit = Unit::new(&dwarf,header).unwrap();
-                            println!("{:?}", unit);
-                            //parse_dwarf_unit(&unit, &dwarf)?;
+                    let endian = LittleEndian;
+
+                    match name {
+                        ".debug_info" => {
+                            let mut iter = dwarf.units();
+                            while let Some(header) = iter.next()? {
+                                let unit = Unit::new(&dwarf, header).unwrap();
+                                //println!("{:?}", unit);
+                                // parse_dwarf_unit(&unit, &dwarf)?;
+                            }
+                        },
+                        ".debug_abbrev" => {
+                            let mut iter = dwarf.units();
+                            while let Some(header) = iter.next()? {
+                                let unit = Unit::new(&dwarf, header).unwrap();
+                                //println!("{:?}", unit);
+                                //parse_dwarf_unit(&unit, &dwarf)?;
+                            }
                         }
+                        _ => {}
                     }
                 },
-                // ... handle other sections ...
+                Payload::FunctionSection(reader) => {
+                    let mut reader = reader;
+                    for (index, func) in reader.into_iter().enumerate() {
+                        let func_type_index = func?;
+                        function_type_indices.push(func_type_index);
+                    }
+                },
+                Payload::CodeSectionStart { count, range, size } => {
+                    let code_section = CodeSectionReader::new(wasm_contents.get(range.start..range.end).ok_or("Range out of bounds")?, 0)?;
+                    for (index, body) in code_section.into_iter().enumerate() {
+                        let body = body?;
+                        let func_type_index = function_type_indices[index];
+
+                        println!("Function index {}: type index {}", index, func_type_index);
+
+                        for op in body.get_operators_reader()? {
+                            match op? {
+                                Operator::Call { function_index } => {
+                                    println!("Function {} calls function {}", index, function_index);
+                                },
+                                Operator::LocalGet { local_index } => {
+                                    println!("Function {} accesses local variable {}", index, local_index);
+                                },
+                                Operator::I32Load { memarg } => {
+                                    println!("Function {} performs an I32 load from memory at offset {}", index, memarg.offset);
+                                },
+                                Operator::I32Const { value } => {
+                                    println!("Function {} uses the constant I32 value {}", index, value);
+                                },
+                                Operator::If { .. } => {
+                                    println!("Function {} contains an if statement", index);
+                                },
+                                // ... other operators ...
+                                _ => (),
+                            }
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -142,18 +194,19 @@ fn process_die_tree<R: Reader<Offset = usize>>(
     unit: &Unit<R>,
 ) -> Result<(), Box<dyn Error>> {
     let entry = node.entry();
-    match entry.tag() {
-        gimli::constants::DW_TAG_subprogram => {
-            if let Some(name) = entry.attr(gimli::constants::DW_AT_name)? {
-                if let AttributeValue::DebugStrRef(offset) = name.value() {
-                    let name_str = dwarf.debug_str.get_str(offset)?;
-                    println!("Function: {}", name_str.to_string()?);
-                }
-            }
-        }
-        // Add other cases here to handle variables, types, etc.
-        _ => {}
-    }
+    println!("tag {:?}", entry.attrs());
+    // match entry.tag() {
+    //     gimli::constants::DW_TAG_subprogram => {
+    //         if let Some(name) = entry.attr(gimli::constants::DW_AT_name)? {
+    //             if let AttributeValue::DebugStrRef(offset) = name.value() {
+    //                 let name_str = dwarf.debug_str.get_str(offset)?;
+    //                 println!("Function: {}", name_str.to_string()?);
+    //             }
+    //         }
+    //     }
+    //     // Add other cases here to handle variables, types, etc.
+    //     _ => {}
+    // }
 
     // Recursively process child DIEs
     // let mut children = &node.children();
