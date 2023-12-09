@@ -4,6 +4,7 @@ use crate::error::Result;
 use gimli::{DebugAddr, DebugAranges, DebugLineStr, DebugStr, DebugStrOffsets, DebugTypes, DebugAbbrev, DebugInfo, DebugLine, LittleEndian, AttributeValue, DebuggingInformationEntry, EndianSlice, EntriesTreeNode, constants, RunTimeEndian, BigEndian, Dwarf, Reader, Unit, RangeLists, LocationLists};
 use object::{Object, ObjectSection};
 use crate::debug_data::{DebugInfoStorage, Function, Variable};
+use crate::source_maps::{SourceMap, SourceMapEntry};
 
 pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
     let parser = Parser::new(0);
@@ -130,13 +131,17 @@ pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn std::error::Error
                     for (index, body) in code_section.into_iter().enumerate() {
                         let body = body?;
                         let func_type_index = function_type_indices[index];
+                        let mut operators = body.get_operators_reader()?;
+                        let mut source_map = SourceMap::new();
 
-                        println!("Function index {}: type index {}", index, func_type_index);
 
-                        for op in body.get_operators_reader()? {
+                        while let Some(op) = operators.read()? {
+                            let op_offset = operators.current_position();
+
                             match op? {
                                 Operator::Call { function_index } => {
                                     println!("Function {} calls function {}", index, function_index);
+                                    source_map.add_entry(op_offset, SourceMapEntry::FunctionCall(function_index));
                                 },
                                 Operator::LocalGet { local_index } => {
                                     println!("Function {} accesses local variable {}", index, local_index);
