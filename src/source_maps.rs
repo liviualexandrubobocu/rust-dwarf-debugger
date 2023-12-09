@@ -33,4 +33,10 @@ pub enum SourceMapEntry {
         local_index: u32,
         source_line: u32,  // Line number in the source code
     },
+    ArithmeticOperation { operation: &'static str, source_line: i32 },
+    Constant { value: String, source_line: i32 },
+    ControlFlow { operation: &'static str, source_line: i32 },
+    MemoryOperation { operation: &'static str, source_line: i32 },
+    ConversionOperation { operation: &'static str, source_line: i32 },
+    ComparisonOperation { operation: &'static str, source_line: i32 },
 }

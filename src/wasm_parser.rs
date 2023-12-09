@@ -140,22 +140,60 @@ pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn std::error::Error
 
                             match op? {
                                 Operator::Call { function_index } => {
-                                    println!("Function {} calls function {}", index, function_index);
-                                    source_map.add_entry(op_offset, SourceMapEntry::FunctionCall(function_index));
+                                    source_map.add_entry(op_offset, SourceMapEntry::FunctionCall { function_index, source_line: 0 });
                                 },
                                 Operator::LocalGet { local_index } => {
-                                    println!("Function {} accesses local variable {}", index, local_index);
+                                    source_map.add_entry(op_offset, SourceMapEntry::VariableAccess { local_index, source_line: 0 });
                                 },
-                                Operator::I32Load { memarg } => {
-                                    println!("Function {} performs an I32 load from memory at offset {}", index, memarg.offset);
+                                Operator::I32Add | Operator::I64Add => {
+                                    source_map.add_entry(op_offset, SourceMapEntry::ArithmeticOperation { operation: "Add", source_line: 0 });
                                 },
-                                Operator::I32Const { value } => {
-                                    println!("Function {} uses the constant I32 value {}", index, value);
+                                Operator::I32Const { value } | Operator::I64Const { value } => {
+                                    source_map.add_entry(op_offset, SourceMapEntry::Constant { value: format!("Const({})", value), source_line: 0 });
                                 },
                                 Operator::If { .. } => {
-                                    println!("Function {} contains an if statement", index);
+                                    source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: "If", source_line: 0 });
                                 },
-                                // ... other operators ...
+                                Operator::Loop { .. } => {
+                                    source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: "Loop", source_line: 0 });
+                                },
+                                Operator::End => {
+                                    source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: "End", source_line: 0 });
+                                },
+                                Operator::Br { relative_depth } => {
+                                    source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: format!("Br {}", relative_depth), source_line: 0 });
+                                },
+                                Operator::BrIf { relative_depth } => {
+                                    source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: format!("BrIf {}", relative_depth), source_line: 0 });
+                                },
+                                // Float arithmetic
+                                Operator::F32Add | Operator::F64Add => {
+                                    source_map.add_entry(op_offset, SourceMapEntry::ArithmeticOperation { operation: "Float Add", source_line: 0 });
+                                },
+
+                                // Memory size and growth
+                                Operator::MemorySize { .. } => {
+                                    source_map.add_entry(op_offset, SourceMapEntry::MemoryOperation { operation: "Memory Size", source_line: 0 });
+                                },
+                                Operator::MemoryGrow { .. } => {
+                                    source_map.add_entry(op_offset, SourceMapEntry::MemoryOperation { operation: "Memory Grow", source_line: 0 });
+                                },
+
+                                // Conversions
+                                Operator::I32WrapI64 => {
+                                    source_map.add_entry(op_offset, SourceMapEntry::ConversionOperation { operation: "I32 Wrap I64", source_line: 0 });
+                                },
+                                Operator::I64ExtendI32S | Operator::I64ExtendI32U => {
+                                    source_map.add_entry(op_offset, SourceMapEntry::ConversionOperation { operation: "I64 Extend I32", source_line: 0 });
+                                },
+
+                                // Comparisons
+                                Operator::I32Eq | Operator::I64Eq => {
+                                    source_map.add_entry(op_offset, SourceMapEntry::ComparisonOperation { operation: "Equal", source_line: 0 });
+                                },
+                                Operator::I32Ne | Operator::I64Ne => {
+                                    source_map.add_entry(op_offset, SourceMapEntry::ComparisonOperation { operation: "Not Equal", source_line: 0 });
+                                },
                                 _ => (),
                             }
                         }
