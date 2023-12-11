@@ -1,12 +1,12 @@
 use std::error::Error;
-use wasmparser::{Parser, Payload, SectionReader, FunctionSectionReader, CodeSectionReader, Operator};
+use wasmparser::{Parser, Payload, SectionReader, CodeSectionReader, Operator, ImportSectionEntryType, ExternalKind, TypeDef};
 use crate::error::Result;
-use gimli::{DebugAddr, DebugAranges, DebugLineStr, DebugStr, DebugStrOffsets, DebugTypes, DebugAbbrev, DebugInfo, DebugLine, LittleEndian, AttributeValue, DebuggingInformationEntry, EndianSlice, EntriesTreeNode, constants, RunTimeEndian, BigEndian, Dwarf, Reader, Unit, RangeLists, LocationLists};
+use gimli::{DebugAddr, DebugAranges, DebugLineStr, DebugStr, DebugStrOffsets, DebugTypes, DebugAbbrev, DebugInfo, DebugLine, LittleEndian, AttributeValue, DebuggingInformationEntry, EndianSlice, EntriesTreeNode, constants, Dwarf, Reader, Unit, RangeLists, LocationLists};
 use object::{Object, ObjectSection};
 use crate::debug_data::{DebugInfoStorage, Function, Variable};
 use crate::source_maps::{SourceMap, SourceMapEntry};
 
-pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn Error>> {
     let parser = Parser::new(0);
     let parser2 = Parser::new(0);
     let mut parsed_debug_info = Some(DebugInfo::from(EndianSlice::new(&[], LittleEndian)));
@@ -135,10 +135,10 @@ pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn std::error::Error
                         let mut source_map = SourceMap::new();
 
 
-                        while let Some(op) = operators.read()? {
-                            let op_offset = operators.current_position();
+                        while let op = operators.read()? {
+                            let op_offset = operators.read_with_offset()?.1;
 
-                            match op? {
+                            match op {
                                 Operator::Call { function_index } => {
                                     source_map.add_entry(op_offset, SourceMapEntry::FunctionCall { function_index, source_line: 0 });
                                 },
@@ -148,9 +148,9 @@ pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn std::error::Error
                                 Operator::I32Add | Operator::I64Add => {
                                     source_map.add_entry(op_offset, SourceMapEntry::ArithmeticOperation { operation: "Add", source_line: 0 });
                                 },
-                                Operator::I32Const { value } | Operator::I64Const { value } => {
-                                    source_map.add_entry(op_offset, SourceMapEntry::Constant { value: format!("Const({})", value), source_line: 0 });
-                                },
+                                // Operator::I32Const { value } | Operator::I64Const { value } => {
+                                //     source_map.add_entry(op_offset, SourceMapEntry::Constant { value: format!("Const({})", value), source_line: 0 });
+                                // },
                                 Operator::If { .. } => {
                                     source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: "If", source_line: 0 });
                                 },
@@ -161,10 +161,10 @@ pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn std::error::Error
                                     source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: "End", source_line: 0 });
                                 },
                                 Operator::Br { relative_depth } => {
-                                    source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: format!("Br {}", relative_depth), source_line: 0 });
+                                    //source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: format!("Br {}", relative_depth), source_line: 0 });
                                 },
                                 Operator::BrIf { relative_depth } => {
-                                    source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: format!("BrIf {}", relative_depth), source_line: 0 });
+                                    // source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: format!("BrIf {}", relative_depth), source_line: 0 });
                                 },
                                 // Float arithmetic
                                 Operator::F32Add | Operator::F64Add => {
@@ -198,8 +198,76 @@ pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn std::error::Error
                             }
                         }
                     }
-                }
-                _ => {}
+                },
+                Payload::TypeSection(reader) => {
+                    for func_type in reader {
+                        match func_type? {
+                            TypeDef::Func(..) => {
+                            // Parse function type
+                            },
+                        // Handle other types as needed
+                            _ => {}
+                        }
+                    }
+                },
+                Payload::ImportSection(reader) => {
+                    for import in reader {
+                        let import = import?;
+                        match import.ty {
+                            ImportSectionEntryType::Function(idx) => {
+                            // Parse imported function
+                            },
+                            _ => {}
+                        // Handle other import types
+                        }
+                    }
+                },
+                Payload::FunctionSection(reader) => {
+                    for func in reader {
+                    // Parse function section entries
+                    }
+                },
+                Payload::ExportSection(reader) => {
+                    for export in reader {
+                        let export = export?;
+                            match export.kind {
+                                ExternalKind::Function => {
+                                // Parse exported function
+                                },
+                                _ => {}
+                        }
+                    }
+                },
+                Payload::GlobalSection(reader) => {
+                    for global in reader {
+                    // Parse global variable
+                    }
+                },
+                Payload::MemorySection(reader) => {
+                    for memory in reader {
+                    // Parse memory entry
+                    }
+                },
+                Payload::TableSection(reader) => {
+                    for table in reader {
+                    // Parse table entry
+                    }
+                },
+                Payload::ElementSection(reader) => {
+                    for element in reader {
+                    // Parse element entry
+                    }
+                },
+                Payload::CodeSectionStart { .. } => {
+                // Handle code section start
+                },
+                Payload::DataSection(reader) => {
+                    for data in reader {
+                    // Parse data entry
+                    }
+                },
+                _ => {} // Ignore other sections/payloads
+
             }
         }
 
