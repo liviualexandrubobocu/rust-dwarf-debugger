@@ -24,6 +24,12 @@ impl SourceMap {
     }
 }
 
+struct FunctionTypeInfo {
+    params: Vec<wasmparser::Type>,
+    returns: Vec<wasmparser::Type>,
+}
+
+
 pub enum SourceMapEntry {
     FunctionCall {
         function_index: u32,
@@ -39,4 +45,5 @@ pub enum SourceMapEntry {
     MemoryOperation { operation: &'static str, source_line: i32 },
     ConversionOperation { operation: &'static str, source_line: i32 },
     ComparisonOperation { operation: &'static str, source_line: i32 },
+    FunctionTypeInfo { type_info: Option<FunctionTypeInfo>},
 }

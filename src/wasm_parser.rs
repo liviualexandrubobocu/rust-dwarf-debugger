@@ -202,10 +202,33 @@ pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn Error>> {
                 Payload::TypeSection(reader) => {
                     for func_type in reader {
                         match func_type? {
-                            TypeDef::Func(..) => {
-                            // Parse function type
+                            TypeDef::Func(func_type) => {
+                                let params = func_type.params.iter().map(|&val| val).collect::<Vec<_>>();
+                                let returns = func_type.returns.iter().map(|&val| val).collect::<Vec<_>>();
+
+                                // Store or process this information
+                                // Example: Add to a vector or hash map for later reference
                             },
-                        // Handle other types as needed
+                            TypeDef::Module(module_type) => {
+                                let imports = module_type.imports.iter().map(|import| {
+                                    // Extract relevant details from import
+                                }).collect::<Vec<_>>();
+
+                                let exports = module_type.exports.iter().map(|export| {
+                                    // Extract relevant details from export
+                                }).collect::<Vec<_>>();
+
+                                // Store or process this information
+                                // Example: Add to a vector or hash map for later reference
+                            },
+                            TypeDef::Instance(instance_type) => {
+                                let exports = instance_type.exports.iter().map(|export| {
+                                    // Extract relevant details from export
+                                }).collect::<Vec<_>>();
+
+                                // Store or process this information
+                                // Example: Add to a vector or hash map for later reference
+                            },
                             _ => {}
                         }
                     }
