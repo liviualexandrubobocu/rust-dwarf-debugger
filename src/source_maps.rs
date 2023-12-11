@@ -24,7 +24,7 @@ impl SourceMap {
     }
 }
 
-struct FunctionTypeInfo {
+pub struct FunctionTypeInfo {
     params: Vec<wasmparser::Type>,
     returns: Vec<wasmparser::Type>,
 }

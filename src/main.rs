@@ -4,6 +4,7 @@ mod error;
 mod debug_data;
 mod source_maps;
 mod state_management;
+mod custom_sections;
 
 use io::Error;
 use std::env;

@@ -5,69 +5,19 @@ use gimli::{DebugAddr, DebugAranges, DebugLineStr, DebugStr, DebugStrOffsets, De
 use object::{Object, ObjectSection};
 use crate::debug_data::{DebugInfoStorage, Function, Variable};
 use crate::source_maps::{SourceMap, SourceMapEntry};
+use crate::custom_sections::{parse_custom_section};
 
 pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn Error>> {
     let parser = Parser::new(0);
     let parser2 = Parser::new(0);
-    let mut parsed_debug_info = Some(DebugInfo::from(EndianSlice::new(&[], LittleEndian)));
-    let mut parsed_debug_abbrev = Some(DebugAbbrev::from(EndianSlice::new(&[], LittleEndian)));
-    let mut parsed_debug_addr = Some(DebugAddr::from(EndianSlice::new(&[], LittleEndian)));
-    let mut parsed_debug_line =  Some(DebugLine::from(EndianSlice::new(&[], LittleEndian)));
-    let mut parsed_debug_aranges = Some(DebugAranges::from(EndianSlice::new(&[], LittleEndian)));
-    let mut parsed_debug_str = Some(DebugStr::from(EndianSlice::new(&[], LittleEndian)));
-    let mut parsed_debug_str_offsets = Some(DebugStrOffsets::from(EndianSlice::new(&[], LittleEndian)));
-    let mut parsed_ranged_lists = Some(RangeLists::new(Default::default(), Default::default()));
-    let mut parsed_debug_loc = Some(LocationLists::new(Default::default(), Default::default()));
-    let mut parsed_debug_types = Some(DebugTypes::from(EndianSlice::new(&[], LittleEndian)));
-    let mut parsed_debug_line_str = Some(DebugLineStr::from(EndianSlice::new(&[], LittleEndian)));
 
+    let mut dwarf = None;
     for payload in parser.parse_all(wasm_contents) {
         {
             match payload? {
                 Payload::CustomSection { name, data, .. } => {
                     let endian = LittleEndian;
-
-                    match name {
-                        ".debug_info" => {
-                            let debug_info = DebugInfo::new(data, endian);
-                            parsed_debug_info = Some(debug_info);
-                        }
-                        ".debug_abbrev" => {
-                            let debug_abbrev = DebugAbbrev::new(data, endian);
-                            parsed_debug_abbrev = Some(debug_abbrev);
-                        }
-                        ".debug_line" => {
-                            let debug_line = DebugLine::new(data, endian);
-                            parsed_debug_line = Some(debug_line);
-                        }
-                        ".debug_line_str" => {
-                            let debug_line_str = DebugLineStr::new(data, endian);
-                            parsed_debug_line_str = Some(debug_line_str);
-                        }
-                        ".debug_aranges" => {
-                            let debug_aranges = DebugAranges::new(data, endian);
-                            parsed_debug_aranges = Some(debug_aranges);
-                        }
-                        ".debug_str" => {
-                            let debug_str = DebugStr::new(data, endian);
-                            parsed_debug_str = Some(debug_str);
-                        }
-                        ".debug_str_offsets" => {
-                            let debug_str_offsets = DebugStrOffsets::from(EndianSlice::new(data, LittleEndian));
-                            parsed_debug_str_offsets = Some(debug_str_offsets);
-                        }
-                        ".debug_loc" => {
-                            // Assuming DebugLoc type exists and has a constructor similar to others
-                            let debug_loc = LocationLists::new(Default::default(), Default::default());
-                            parsed_debug_loc = Some(debug_loc);
-                        }
-                        ".debug_types" => {
-                            // Assuming DebugTypes type exists and has a constructor similar to others
-                            let debug_types = DebugTypes::new(data, endian);
-                            parsed_debug_types = Some(debug_types);
-                        }
-                        _ => ()
-                    }
+                    dwarf = parse_custom_section(name, data, endian);
 
                 },
                 _ => ()
@@ -75,223 +25,212 @@ pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let dwarf = Dwarf {
-        debug_abbrev: parsed_debug_abbrev.unwrap(),
-        debug_info: parsed_debug_info.unwrap(),
-        debug_addr: parsed_debug_addr.unwrap(),
-        debug_aranges: parsed_debug_aranges.unwrap(),
-        debug_line: parsed_debug_line.unwrap(),
-        debug_line_str: parsed_debug_line_str.unwrap(),
-        debug_str: parsed_debug_str.unwrap(),
-        debug_str_offsets: parsed_debug_str_offsets.unwrap(),
-        debug_types: parsed_debug_types.unwrap(),
-        file_type: Default::default(),
-        ranges: parsed_ranged_lists.unwrap(),
-        locations: parsed_debug_loc.unwrap(),
-        sup: None
-    };
-
     let mut function_type_indices = Vec::new();
 
-    for payload in parser2.parse_all(wasm_contents) {
-        {
-            match payload? {
-                Payload::CustomSection { name, data, .. } => {
-                    let endian = LittleEndian;
+    if dwarf.is_some() {
+        for payload in parser2.parse_all(wasm_contents) {
+            {
+                match payload? {
+                    Payload::CustomSection { name, data, .. } => {
+                        let endian = LittleEndian;
 
-                    match name {
-                        ".debug_info" => {
-                            let mut iter = dwarf.units();
-                            while let Some(header) = iter.next()? {
-                                let unit = Unit::new(&dwarf, header).unwrap();
-                                //println!("{:?}", unit);
-                                // parse_dwarf_unit(&unit, &dwarf)?;
-                            }
-                        },
-                        ".debug_abbrev" => {
-                            let mut iter = dwarf.units();
-                            while let Some(header) = iter.next()? {
-                                let unit = Unit::new(&dwarf, header).unwrap();
-                                //println!("{:?}", unit);
-                                //parse_dwarf_unit(&unit, &dwarf)?;
-                            }
-                        }
-                        _ => {}
-                    }
-                },
-                Payload::FunctionSection(reader) => {
-                    let mut reader = reader;
-                    for (index, func) in reader.into_iter().enumerate() {
-                        let func_type_index = func?;
-                        function_type_indices.push(func_type_index);
-                    }
-                },
-                Payload::CodeSectionStart { count, range, size } => {
-                    let code_section = CodeSectionReader::new(wasm_contents.get(range.start..range.end).ok_or("Range out of bounds")?, 0)?;
-                    for (index, body) in code_section.into_iter().enumerate() {
-                        let body = body?;
-                        let func_type_index = function_type_indices[index];
-                        let mut operators = body.get_operators_reader()?;
-                        let mut source_map = SourceMap::new();
-
-
-                        while let op = operators.read()? {
-                            let op_offset = operators.read_with_offset()?.1;
-
-                            match op {
-                                Operator::Call { function_index } => {
-                                    source_map.add_entry(op_offset, SourceMapEntry::FunctionCall { function_index, source_line: 0 });
-                                },
-                                Operator::LocalGet { local_index } => {
-                                    source_map.add_entry(op_offset, SourceMapEntry::VariableAccess { local_index, source_line: 0 });
-                                },
-                                Operator::I32Add | Operator::I64Add => {
-                                    source_map.add_entry(op_offset, SourceMapEntry::ArithmeticOperation { operation: "Add", source_line: 0 });
-                                },
-                                // Operator::I32Const { value } | Operator::I64Const { value } => {
-                                //     source_map.add_entry(op_offset, SourceMapEntry::Constant { value: format!("Const({})", value), source_line: 0 });
-                                // },
-                                Operator::If { .. } => {
-                                    source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: "If", source_line: 0 });
-                                },
-                                Operator::Loop { .. } => {
-                                    source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: "Loop", source_line: 0 });
-                                },
-                                Operator::End => {
-                                    source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: "End", source_line: 0 });
-                                },
-                                Operator::Br { relative_depth } => {
-                                    //source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: format!("Br {}", relative_depth), source_line: 0 });
-                                },
-                                Operator::BrIf { relative_depth } => {
-                                    // source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: format!("BrIf {}", relative_depth), source_line: 0 });
-                                },
-                                // Float arithmetic
-                                Operator::F32Add | Operator::F64Add => {
-                                    source_map.add_entry(op_offset, SourceMapEntry::ArithmeticOperation { operation: "Float Add", source_line: 0 });
-                                },
-
-                                // Memory size and growth
-                                Operator::MemorySize { .. } => {
-                                    source_map.add_entry(op_offset, SourceMapEntry::MemoryOperation { operation: "Memory Size", source_line: 0 });
-                                },
-                                Operator::MemoryGrow { .. } => {
-                                    source_map.add_entry(op_offset, SourceMapEntry::MemoryOperation { operation: "Memory Grow", source_line: 0 });
-                                },
-
-                                // Conversions
-                                Operator::I32WrapI64 => {
-                                    source_map.add_entry(op_offset, SourceMapEntry::ConversionOperation { operation: "I32 Wrap I64", source_line: 0 });
-                                },
-                                Operator::I64ExtendI32S | Operator::I64ExtendI32U => {
-                                    source_map.add_entry(op_offset, SourceMapEntry::ConversionOperation { operation: "I64 Extend I32", source_line: 0 });
-                                },
-
-                                // Comparisons
-                                Operator::I32Eq | Operator::I64Eq => {
-                                    source_map.add_entry(op_offset, SourceMapEntry::ComparisonOperation { operation: "Equal", source_line: 0 });
-                                },
-                                Operator::I32Ne | Operator::I64Ne => {
-                                    source_map.add_entry(op_offset, SourceMapEntry::ComparisonOperation { operation: "Not Equal", source_line: 0 });
-                                },
-                                _ => (),
-                            }
-                        }
-                    }
-                },
-                Payload::TypeSection(reader) => {
-                    for func_type in reader {
-                        match func_type? {
-                            TypeDef::Func(func_type) => {
-                                let params = func_type.params.iter().map(|&val| val).collect::<Vec<_>>();
-                                let returns = func_type.returns.iter().map(|&val| val).collect::<Vec<_>>();
-
-                                // Store or process this information
-                                // Example: Add to a vector or hash map for later reference
+                        match name {
+                            ".debug_info" => {
+                                let dwarf_section = dwarf.as_ref().unwrap();
+                                let mut iter = dwarf_section.units();
+                                while let Some(header) = iter.next()? {
+                                    let unit = Unit::new(&dwarf_section, header).unwrap();
+                                    //println!("{:?}", unit);
+                                    // parse_dwarf_unit(&unit, &dwarf)?;
+                                }
                             },
-                            TypeDef::Module(module_type) => {
-                                let imports = module_type.imports.iter().map(|import| {
-                                    // Extract relevant details from import
-                                }).collect::<Vec<_>>();
-
-                                let exports = module_type.exports.iter().map(|export| {
-                                    // Extract relevant details from export
-                                }).collect::<Vec<_>>();
-
-                                // Store or process this information
-                                // Example: Add to a vector or hash map for later reference
-                            },
-                            TypeDef::Instance(instance_type) => {
-                                let exports = instance_type.exports.iter().map(|export| {
-                                    // Extract relevant details from export
-                                }).collect::<Vec<_>>();
-
-                                // Store or process this information
-                                // Example: Add to a vector or hash map for later reference
-                            },
+                            ".debug_abbrev" => {
+                                let dwarf_section = dwarf.as_ref().unwrap();
+                                let mut iter = dwarf_section.units();
+                                while let Some(header) = iter.next()? {
+                                    let unit = Unit::new(&dwarf_section, header).unwrap();
+                                    //println!("{:?}", unit);
+                                    //parse_dwarf_unit(&unit, &dwarf)?;
+                                }
+                            }
                             _ => {}
                         }
-                    }
-                },
-                Payload::ImportSection(reader) => {
-                    for import in reader {
-                        let import = import?;
-                        match import.ty {
-                            ImportSectionEntryType::Function(idx) => {
-                            // Parse imported function
-                            },
-                            _ => {}
-                        // Handle other import types
+                    },
+                    Payload::FunctionSection(reader) => {
+                        let mut reader = reader;
+                        for (index, func) in reader.into_iter().enumerate() {
+                            let func_type_index = func?;
+                            function_type_indices.push(func_type_index);
                         }
-                    }
-                },
-                Payload::FunctionSection(reader) => {
-                    for func in reader {
-                    // Parse function section entries
-                    }
-                },
-                Payload::ExportSection(reader) => {
-                    for export in reader {
-                        let export = export?;
-                            match export.kind {
-                                ExternalKind::Function => {
-                                // Parse exported function
+                    },
+                    Payload::CodeSectionStart { count, range, size } => {
+                        let code_section = CodeSectionReader::new(wasm_contents.get(range.start..range.end).ok_or("Range out of bounds")?, 0)?;
+                        for (index, body) in code_section.into_iter().enumerate() {
+                            let body = body?;
+                            let func_type_index = function_type_indices[index];
+                            let mut operators = body.get_operators_reader()?;
+                            let mut source_map = SourceMap::new();
+
+
+                            while let op = operators.read()? {
+                                let op_offset = operators.read_with_offset()?.1;
+
+                                match op {
+                                    Operator::Call { function_index } => {
+                                        source_map.add_entry(op_offset, SourceMapEntry::FunctionCall { function_index, source_line: 0 });
+                                    },
+                                    Operator::LocalGet { local_index } => {
+                                        source_map.add_entry(op_offset, SourceMapEntry::VariableAccess { local_index, source_line: 0 });
+                                    },
+                                    Operator::I32Add | Operator::I64Add => {
+                                        source_map.add_entry(op_offset, SourceMapEntry::ArithmeticOperation { operation: "Add", source_line: 0 });
+                                    },
+                                    // Operator::I32Const { value } | Operator::I64Const { value } => {
+                                    //     source_map.add_entry(op_offset, SourceMapEntry::Constant { value: format!("Const({})", value), source_line: 0 });
+                                    // },
+                                    Operator::If { .. } => {
+                                        source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: "If", source_line: 0 });
+                                    },
+                                    Operator::Loop { .. } => {
+                                        source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: "Loop", source_line: 0 });
+                                    },
+                                    Operator::End => {
+                                        source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: "End", source_line: 0 });
+                                    },
+                                    Operator::Br { relative_depth } => {
+                                        //source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: format!("Br {}", relative_depth), source_line: 0 });
+                                    },
+                                    Operator::BrIf { relative_depth } => {
+                                        // source_map.add_entry(op_offset, SourceMapEntry::ControlFlow { operation: format!("BrIf {}", relative_depth), source_line: 0 });
+                                    },
+                                    // Float arithmetic
+                                    Operator::F32Add | Operator::F64Add => {
+                                        source_map.add_entry(op_offset, SourceMapEntry::ArithmeticOperation { operation: "Float Add", source_line: 0 });
+                                    },
+
+                                    // Memory size and growth
+                                    Operator::MemorySize { .. } => {
+                                        source_map.add_entry(op_offset, SourceMapEntry::MemoryOperation { operation: "Memory Size", source_line: 0 });
+                                    },
+                                    Operator::MemoryGrow { .. } => {
+                                        source_map.add_entry(op_offset, SourceMapEntry::MemoryOperation { operation: "Memory Grow", source_line: 0 });
+                                    },
+
+                                    // Conversions
+                                    Operator::I32WrapI64 => {
+                                        source_map.add_entry(op_offset, SourceMapEntry::ConversionOperation { operation: "I32 Wrap I64", source_line: 0 });
+                                    },
+                                    Operator::I64ExtendI32S | Operator::I64ExtendI32U => {
+                                        source_map.add_entry(op_offset, SourceMapEntry::ConversionOperation { operation: "I64 Extend I32", source_line: 0 });
+                                    },
+
+                                    // Comparisons
+                                    Operator::I32Eq | Operator::I64Eq => {
+                                        source_map.add_entry(op_offset, SourceMapEntry::ComparisonOperation { operation: "Equal", source_line: 0 });
+                                    },
+                                    Operator::I32Ne | Operator::I64Ne => {
+                                        source_map.add_entry(op_offset, SourceMapEntry::ComparisonOperation { operation: "Not Equal", source_line: 0 });
+                                    },
+                                    _ => (),
+                                }
+                            }
+                        }
+                    },
+                    Payload::TypeSection(reader) => {
+                        for func_type in reader {
+                            match func_type? {
+                                TypeDef::Func(func_type) => {
+                                    let params = func_type.params.iter().map(|&val| val).collect::<Vec<_>>();
+                                    let returns = func_type.returns.iter().map(|&val| val).collect::<Vec<_>>();
+
+                                    // Store or process this information
+                                    // Example: Add to a vector or hash map for later reference
+                                },
+                                TypeDef::Module(module_type) => {
+                                    let imports = module_type.imports.iter().map(|import| {
+                                        // Extract relevant details from import
+                                    }).collect::<Vec<_>>();
+
+                                    let exports = module_type.exports.iter().map(|export| {
+                                        // Extract relevant details from export
+                                    }).collect::<Vec<_>>();
+
+                                    // Store or process this information
+                                    // Example: Add to a vector or hash map for later reference
+                                },
+                                TypeDef::Instance(instance_type) => {
+                                    let exports = instance_type.exports.iter().map(|export| {
+                                        // Extract relevant details from export
+                                    }).collect::<Vec<_>>();
+
+                                    // Store or process this information
+                                    // Example: Add to a vector or hash map for later reference
                                 },
                                 _ => {}
+                            }
                         }
-                    }
-                },
-                Payload::GlobalSection(reader) => {
-                    for global in reader {
-                    // Parse global variable
-                    }
-                },
-                Payload::MemorySection(reader) => {
-                    for memory in reader {
-                    // Parse memory entry
-                    }
-                },
-                Payload::TableSection(reader) => {
-                    for table in reader {
-                    // Parse table entry
-                    }
-                },
-                Payload::ElementSection(reader) => {
-                    for element in reader {
-                    // Parse element entry
-                    }
-                },
-                Payload::CodeSectionStart { .. } => {
-                // Handle code section start
-                },
-                Payload::DataSection(reader) => {
-                    for data in reader {
-                    // Parse data entry
-                    }
-                },
-                _ => {} // Ignore other sections/payloads
+                    },
+                    Payload::ImportSection(reader) => {
+                        for import in reader {
+                            let import = import?;
+                            match import.ty {
+                                ImportSectionEntryType::Function(idx) => {
+                                    // Parse imported function
+                                },
+                                _ => {}
+                                // Handle other import types
+                            }
+                        }
+                    },
+                    Payload::FunctionSection(reader) => {
+                        for func in reader {
+                            // Parse function section entries
+                        }
+                    },
+                    Payload::ExportSection(reader) => {
+                        for export in reader {
+                            let export = export?;
+                            match export.kind {
+                                ExternalKind::Function => {
+                                    // Parse exported function
+                                },
+                                _ => {}
+                            }
+                        }
+                    },
+                    Payload::GlobalSection(reader) => {
+                        for global in reader {
+                            // Parse global variable
+                        }
+                    },
+                    Payload::MemorySection(reader) => {
+                        for memory in reader {
+                            // Parse memory entry
+                        }
+                    },
+                    Payload::TableSection(reader) => {
+                        for table in reader {
+                            // Parse table entry
+                        }
+                    },
+                    Payload::ElementSection(reader) => {
+                        for element in reader {
+                            // Parse element entry
+                        }
+                    },
+                    Payload::CodeSectionStart { .. } => {
+                        // Handle code section start
+                    },
+                    Payload::DataSection(reader) => {
+                        for data in reader {
+                            // Parse data entry
+                        }
+                    },
+                    _ => {} // Ignore other sections/payloads
 
+                }
             }
+
         }
 
     }
