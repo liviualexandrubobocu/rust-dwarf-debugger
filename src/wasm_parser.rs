@@ -1,13 +1,15 @@
 use std::error::Error;
 use wasmparser::{Parser, Payload, SectionReader, CodeSectionReader, Operator, ImportSectionEntryType, ExternalKind, TypeDef};
 use crate::error::Result;
-use gimli::{DebugAddr, DebugAranges, DebugLineStr, DebugStr, DebugStrOffsets, DebugTypes, DebugAbbrev, DebugInfo, DebugLine, LittleEndian, AttributeValue, DebuggingInformationEntry, EndianSlice, EntriesTreeNode, constants, Dwarf, Reader, Unit, RangeLists, LocationLists};
+use gimli::{DebugAbbrev, LittleEndian, AttributeValue, DebuggingInformationEntry, EndianSlice, EntriesTreeNode, constants, Dwarf, Reader, Unit};
 use object::{Object, ObjectSection};
 use crate::debug_data::{DebugInfoStorage, Function, Variable};
 use crate::source_maps::{SourceMap, SourceMapEntry};
 use crate::custom_sections::{parse_custom_section};
+use crate::state_management::{FunctionImportInfo, FunctionSignature, GlobalImportInfo, GlobalType, MemoryImportInfo, MemoryType, TableImportInfo, TableType};
+use crate::wasm_sections::{FunctionSignature, GlobalType, MemoryType, TableType};
 
-pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn Error>> {
+pub fn parse_wasm(wasm_contents: &[u8]) -> Result<(), Box<dyn Error>> {
     let parser = Parser::new(0);
     let parser2 = Parser::new(0);
 
@@ -172,13 +174,93 @@ pub fn parse_wasm2(wasm_contents: &[u8]) -> Result<(), Box<dyn Error>> {
                     },
                     Payload::ImportSection(reader) => {
                         for import in reader {
-                            let import = import?;
+                            let import = match import {
+                                Ok(i) => i,
+                                Err(e) => {
+                                    // Handle the error, for example, log it or return from the function
+                                    eprintln!("Error parsing import: {}", e);
+                                    continue; // Skip this iteration
+                                }
+                            };
+
                             match import.ty {
                                 ImportSectionEntryType::Function(idx) => {
-                                    // Parse imported function
+                                    // Get the signature and documentation for the function
+                                    // This will depend on how you're accessing the WASM module's type information and documentation
+                                    let signature = FunctionSignature {
+                                        // Populate the signature details
+                                        parameter_types: vec![], // Example: Fill this with the parameter types
+                                        return_type: None,       // Example: Set the return type if applicable
+                                    };
+                                    let documentation = "Function documentation or comments".to_string();
+
+                                    let info = FunctionImportInfo {
+                                        module_name: import.module.to_string(),
+                                        import_name: import.field.to_string(),
+                                        type_idx: idx,
+                                        signature,
+                                        documentation,
+                                    };
+                                    self.function_imports.push(info);
+
+
                                 },
-                                _ => {}
-                                // Handle other import types
+                                ImportSectionEntryType::Global(global_type) => {
+                                    // Create a GlobalType instance based on the global_type information
+                                    let global_type_info = GlobalType {
+                                        value_type: format!("{}", global_type.content_type()), // Convert the type to a string representation
+                                        mutable: global_type.is_mutable(),
+                                    };
+
+                                    let info = GlobalImportInfo {
+                                        module_name: import.module.to_string(),
+                                        import_name: import.field.to_string(),
+                                        global_type: global_type_info,
+                                    };
+                                    self.global_imports.push(info);
+                                },
+                                ImportSectionEntryType::Memory(memory_type) => {
+                                    // Create a MemoryType instance based on the memory_type information
+                                    let memory_type_info = MemoryType {
+                                        initial: memory_type.limits().initial(),
+                                        maximum: memory_type.limits().maximum(), // This might be None if there's no maximum
+                                    };
+
+                                    let info = MemoryImportInfo {
+                                        module_name: import.module.to_string(),
+                                        import_name: import.field.to_string(),
+                                        memory_type: memory_type_info,
+                                    };
+                                    self.memory_imports.push(info);
+                                },
+                                ImportSectionEntryType::Table(table_type) => {
+                                    // Create a TableType instance based on the table_type information
+                                    let table_type_info = TableType {
+                                        element_type: table_type.element_type, // Convert the element type to a string representation
+                                        initial: table_type.limits().initial(),
+                                        maximum: table_type.limits().maximum(), // This might be None if there's no maximum
+                                    };
+
+                                    let info = TableImportInfo {
+                                        module_name: import.module.to_string(),
+                                        import_name: import.field.to_string(),
+                                        table_type: table_type_info,
+                                    };
+                                    self.table_imports.push(info);
+
+                                },
+                                ImportSectionEntryType::Instance(instance_type) => {
+
+                                },
+                                ImportSectionEntryType::Module(module_type) => {
+
+                                },
+                                ImportSectionEntryType::Tag(tag_type) => {
+
+                                },
+                                _ => {
+                                    // Optionally handle other types, or log unhandled types
+                                }
                             }
                         }
                     },

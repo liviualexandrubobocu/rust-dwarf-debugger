@@ -15,3 +15,5 @@ object = "0.32.1"
 lazy_static = "1.4.0"
 parking_lot = "0.11.1"
 
+wasm-bindgen = "0.2.89"
+js-sys = { version = "0.3.66", features = [] }

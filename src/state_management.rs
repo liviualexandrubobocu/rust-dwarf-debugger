@@ -1,14 +1,21 @@
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
 use std::collections::HashMap;
-use gimli::{DebugAddr, DebugAranges, DebugLineStr, DebugLoc, DebugLocLists, DebugRanges, DebugRngLists, DebugStr, DebugStrOffsets, DebugTypes, DebugFrame, EhFrame, DebugAbbrev, DebugInfo, DebugLine, LittleEndian, UnitOffset, AttributeValue, DebuggingInformationEntry, EndianSlice, EntriesTreeNode, constants, RunTimeEndian, BigEndian, Dwarf, Reader, Unit, RangeLists, LocationLists};
-
-
+use crate::wasm_sections::{FunctionImportInfo, GlobalImportInfo, MemoryImportInfo, TableImportInfo};
 trait SharedStateInformation {
     fn add_function_address(&mut self, address: u64, file: String, line: u32);
 }
+
+
+
 pub struct SharedState {
-    function_addresses: HashMap<u64, (String, u32)>
+    function_addresses: HashMap<u64, (String, u32)>,
+    // imports section
+    function_imports: Vec<FunctionImportInfo>,
+    global_imports: Vec<GlobalImportInfo>,
+    memory_imports: Vec<MemoryImportInfo>,
+    table_imports: Vec<TableImportInfo>,
+    // other fields as needed...
 }
 
 impl SharedState {

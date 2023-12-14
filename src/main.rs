@@ -5,9 +5,9 @@ mod debug_data;
 mod source_maps;
 mod state_management;
 mod custom_sections;
+mod wasm_sections;
 
 use io::Error;
-use std::env;
 use std::fs;
 
 use std::io::Read;
@@ -20,7 +20,6 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::io::{self, BufRead};
-use gimli::LittleEndian;
 use memmap2::Mmap;
 
 
@@ -66,7 +65,7 @@ fn main() -> Result<()> {
 
     parse_wasm_header(&data)?;
 
-    wasm_parser::parse_wasm2(&data).unwrap();
+    wasm_parser::parse_wasm(&data).unwrap();
 
    // wasm_parser::parse_wasm(&data, &mmap, LittleEndian).unwrap();
     Ok(())
