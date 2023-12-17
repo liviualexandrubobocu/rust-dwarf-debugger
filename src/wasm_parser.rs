@@ -1,5 +1,5 @@
 use std::error::Error;
-use wasmparser::{Parser, Payload, SectionReader, CodeSectionReader, Operator, ImportSectionEntryType, ExternalKind, TypeDef};
+use wasmparser::{Parser, Payload, SectionReader, CodeSectionReader, Operator, ImportSectionEntryType, ExternalKind, TypeDef, FuncType};
 use crate::error::Result;
 use gimli::{DebugAbbrev, LittleEndian, AttributeValue, DebuggingInformationEntry, EndianSlice, EntriesTreeNode, constants, Dwarf, Reader, Unit};
 use object::{Object, ObjectSection};
@@ -8,6 +8,21 @@ use crate::source_maps::{SourceMap, SourceMapEntry};
 use crate::custom_sections::{parse_custom_section};
 use crate::state_management::{FunctionImportInfo, FunctionSignature, GlobalImportInfo, GlobalType, MemoryImportInfo, MemoryType, TableImportInfo, TableType};
 use crate::wasm_sections::{FunctionSignature, GlobalType, MemoryType, TableType};
+
+
+fn analyze_function_signature(func_type: &FuncType) {
+    println!("Parameters:");
+    for param in func_type.params() {
+        println!(" - Type: {:?}", param);
+    }
+
+    println!("Return Types:");
+    for return_type in func_type.returns() {
+        println!(" - Type: {:?}", return_type);
+    }
+
+    // Additional analysis here...
+}
 
 pub fn parse_wasm(wasm_contents: &[u8]) -> Result<(), Box<dyn Error>> {
     let parser = Parser::new(0);
@@ -28,6 +43,7 @@ pub fn parse_wasm(wasm_contents: &[u8]) -> Result<(), Box<dyn Error>> {
     }
 
     let mut function_type_indices = Vec::new();
+    let mut function_signatures = Vec::new();
 
     if dwarf.is_some() {
         for payload in parser2.parse_all(wasm_contents) {
@@ -59,10 +75,16 @@ pub fn parse_wasm(wasm_contents: &[u8]) -> Result<(), Box<dyn Error>> {
                         }
                     },
                     Payload::FunctionSection(reader) => {
-                        let mut reader = reader;
                         for (index, func) in reader.into_iter().enumerate() {
-                            let func_type_index = func?;
-                            function_type_indices.push(func_type_index);
+                            let type_index = func? as usize;
+                            if let Some(func_type) = function_signatures.get(type_index) {
+                                println!("Function {} has type index {} with signature {:?}", index, type_index, func_type);
+
+                                // Analyze the function signature
+                                analyze_function_signature(func_type);
+                            } else {
+                                eprintln!("Invalid type index: {}", type_index);
+                            }
                         }
                     },
                     Payload::CodeSectionStart { count, range, size } => {
@@ -144,6 +166,7 @@ pub fn parse_wasm(wasm_contents: &[u8]) -> Result<(), Box<dyn Error>> {
                                 TypeDef::Func(func_type) => {
                                     let params = func_type.params.iter().map(|&val| val).collect::<Vec<_>>();
                                     let returns = func_type.returns.iter().map(|&val| val).collect::<Vec<_>>();
+                                    function_signatures.push(func_type);
 
                                     // Store or process this information
                                     // Example: Add to a vector or hash map for later reference
@@ -262,11 +285,6 @@ pub fn parse_wasm(wasm_contents: &[u8]) -> Result<(), Box<dyn Error>> {
                                     // Optionally handle other types, or log unhandled types
                                 }
                             }
-                        }
-                    },
-                    Payload::FunctionSection(reader) => {
-                        for func in reader {
-                            // Parse function section entries
                         }
                     },
                     Payload::ExportSection(reader) => {
