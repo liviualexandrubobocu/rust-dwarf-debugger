@@ -10,17 +10,35 @@
 //
 // }
 
+use std::collections::HashMap;
+
+struct FunctionBytecodeRange {
+    start: usize,
+    end: usize,
+}
+
+
 pub struct SourceMap {
     entries: Vec<SourceMapEntry>,
+    function_names: HashMap<u32, String>,
+    function_bytecode_ranges: HashMap<u32, FunctionBytecodeRange>,
+
 }
 
 impl SourceMap {
     pub(crate) fn new() -> Self {
-        SourceMap { entries: Vec::new() }
+        SourceMap { entries: Vec::new(), function_names: HashMap::new(), function_bytecode_ranges: HashMap::new()}
     }
 
     pub(crate) fn add_entry(&mut self, offset: usize, entry: SourceMapEntry) {
         self.entries.push(entry);
+    }
+
+    pub(crate) fn add_function_name(&mut self, index: u32, name: String) {
+        self.function_names.insert(index, name);
+    }
+    pub(crate) fn add_function_range(&mut self, index: u32, range: FunctionBytecodeRange) {
+        self.function_bytecode_ranges.insert(index, range);
     }
 }
 

@@ -290,13 +290,12 @@ pub fn parse_wasm(wasm_contents: &[u8]) -> Result<(), Box<dyn Error>> {
                     Payload::ExportSection(reader) => {
                         for export in reader {
                             let export = export?;
-                            match export.kind {
-                                ExternalKind::Function => {
-                                    // Parse exported function
-                                },
-                                _ => {}
+                            if let ExternalKind::Function = export.kind {
+                                // Add function name and index to source map
+                                source_map.add_function_name(export.index, export.field.to_string());
                             }
                         }
+
                     },
                     Payload::GlobalSection(reader) => {
                         for global in reader {
