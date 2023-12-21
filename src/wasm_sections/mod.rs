@@ -1,4 +1,7 @@
 mod wasm_sections;
+mod global_section;
+mod import_section;
+
 pub struct FunctionSignature {
     pub parameter_types: Vec<String>,
     pub return_type: Option<String>, // optional if function doesn't return a value
