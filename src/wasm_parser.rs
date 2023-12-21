@@ -6,7 +6,7 @@ use object::{Object, ObjectSection};
 use crate::debug_data::{DebugInfoStorage, Function, Variable};
 use crate::source_maps::{SourceMap, SourceMapEntry};
 use crate::custom_sections::{parse_custom_section};
-use crate::state_management::{FunctionImportInfo, FunctionSignature, GlobalImportInfo, GlobalType, MemoryImportInfo, MemoryType, TableImportInfo, TableType};
+use crate::state_management::{FunctionImportInfo, GlobalImportInfo, MemoryImportInfo, TableImportInfo};
 use crate::wasm_sections::{FunctionSignature, GlobalType, MemoryType, TableType};
 
 
@@ -299,7 +299,16 @@ pub fn parse_wasm(wasm_contents: &[u8]) -> Result<(), Box<dyn Error>> {
                     },
                     Payload::GlobalSection(reader) => {
                         for global in reader {
-                            // Parse global variable
+                            let global = global?;
+                            let global_type = global.ty; // GlobalType (value type and mutability)
+                            let initializer = global.init_expr; // Initializer expression
+
+                            // Process the global variable's type
+                            process_global_type(global_type);
+
+                            // Handle the initializer expression
+                            // This might involve parsing and evaluating the expression
+                            handle_initializer_expression(initializer);
                         }
                     },
                     Payload::MemorySection(reader) => {
