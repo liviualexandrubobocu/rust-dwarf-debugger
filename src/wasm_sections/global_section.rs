@@ -13,7 +13,7 @@ enum Mutability {
 }
 
 // Additional imports for handling DWARF generation
-use gimli::{write::{DwarfUnit, EntriesCursor, Writer}, ...};
+use gimli::{write::{DwarfUnit, Writer}};
 
 // Extended GlobalType with metadata for DWARF generation
 struct GlobalType {
@@ -26,7 +26,7 @@ struct GlobalType {
     // ... other debug related information
 }
 
-fn process_global_type(global_type: GlobalType, dwarf_unit: &mut DwarfUnit) {
+pub fn process_global_type(global_type: GlobalType, dwarf_unit: &mut DwarfUnit) {
     // ... existing code to handle the type and mutability
 
     // DWARF: Create a new DIE in the DWARF debug info for this global

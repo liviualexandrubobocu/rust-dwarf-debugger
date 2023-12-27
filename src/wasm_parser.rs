@@ -7,7 +7,8 @@ use crate::debug_data::{DebugInfoStorage, Function, Variable};
 use crate::source_maps::{SourceMap, SourceMapEntry};
 use crate::custom_sections::{parse_custom_section};
 use crate::state_management::{FunctionImportInfo, GlobalImportInfo, MemoryImportInfo, TableImportInfo};
-use crate::wasm_sections::{FunctionSignature, GlobalType, MemoryType, TableType};
+use crate::wasm_sections::wasm_sections::{FunctionSignature, GlobalType, MemoryType, TableType};
+use crate::wasm_sections::global_section::{process_global_type};
 
 
 fn analyze_function_signature(func_type: &FuncType) {

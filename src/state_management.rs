@@ -2,6 +2,8 @@ use lazy_static::lazy_static;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use crate::wasm_sections::{FunctionImportInfo, GlobalImportInfo, MemoryImportInfo, TableImportInfo};
+use crate::wasm_sections::import_section::{FunctionImportInfo, GlobalImportInfo, MemoryImportInfo, TableImportInfo};
+
 trait SharedStateInformation {
     fn add_function_address(&mut self, address: u64, file: String, line: u32);
 }
@@ -22,6 +24,10 @@ impl SharedState {
     fn new() -> Self {
         SharedState {
             function_addresses: HashMap::new(),
+            function_imports: vec![],
+            global_imports: vec![],
+            memory_imports: vec![],
+            table_imports: vec![],
         }
     }
     fn add_function_address(&mut self, address: u64, file: String, line: u32) {
