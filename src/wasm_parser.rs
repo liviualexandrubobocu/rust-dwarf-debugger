@@ -1,5 +1,5 @@
 use std::error::Error;
-use wasmparser::{Parser, Payload, SectionReader, CodeSectionReader, Operator, ImportSectionEntryType, ExternalKind, TypeDef, FuncType};
+use wasmparser::{Parser, Payload, SectionReader, CodeSectionReader, Operator, ImportSectionEntryType, ExternalKind, TypeDef, FuncType, RefType};
 use crate::error::Result;
 use gimli::{DebugAbbrev, LittleEndian, AttributeValue, DebuggingInformationEntry, EndianSlice, EntriesTreeNode, constants, Dwarf, Reader, Unit};
 use object::{Object, ObjectSection};

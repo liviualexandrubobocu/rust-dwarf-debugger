@@ -1,48 +1,82 @@
-pub struct FunctionSignature {
-    pub parameter_types: Vec<String>,
-    pub return_type: Option<String>, // optional if function doesn't return a value
-}
-pub struct FunctionImportInfo {
-    pub module_name: String, // The name of the module from which the function is imported
-    pub import_name: String, // The name of the imported function
-    pub type_idx: u32,       // The index of the function's type in the type section
-    pub signature: FunctionSignature, // The signature of the function
-    pub documentation: String,
+
+#[derive(Debug)]
+struct Limits {
+    min: u32,        // Minimum number of elements, always present
+    max: Option<u32> // Maximum number of elements, optional
 }
 
-pub struct GlobalType {
-    pub value_type: String, // The type of the global variable (e.g., "i32", "f64")
-    pub mutable: bool,     // Indicates whether the global variable is mutable
+// Recheck HeapType
+#[derive(Debug)]
+enum HeapType {
+    Func,  // Represents a function reference type
+    Extern // Represents an external reference type
+    // Other heap types can be added here
 }
 
-pub struct GlobalImportInfo {
-    pub module_name: String,    // The name of the module from which the global is imported
-    pub import_name: String,    // The name of the imported global variable
-    pub global_type: GlobalType, // Information about the type and mutability of the global variable
-    // Additional fields as needed, such as documentation, etc.
+#[derive(Debug)]
+enum RefType {
+    // Nullable or non-nullable reference to a heap type
+    Null,  // Nullable reference
+    HeapTypeRef(HeapType) // Non-null reference
 }
 
-pub struct MemoryType {
-    pub initial: u32,      // The initial size of the memory (in units of WebAssembly pages)
-    pub maximum: Option<u32>, // The maximum size of the memory (optional, as it might be unbounded)
+#[derive(Debug)]
+struct TableType {
+    limits: Limits,
+    elem_type: RefType,
 }
 
-pub struct MemoryImportInfo {
-    pub module_name: String, // The name of the module from which the memory is imported
-    pub import_name: String, // The name of the imported memory
-    pub memory_type: MemoryType, // Information about the size characteristics of the memory
-    // Additional fields as needed, such as documentation, etc.
+
+enum ImportDescriptor {
+    Function(u32),  // function with type index
+    Table(TableType),
+    Memory(MemoryType),
+    Global(GlobalType),
 }
 
-pub struct TableType {
-    pub element_type: String,   // The type of elements in the table (e.g., "funcref")
-    pub initial: u32,           // The initial size of the table (in elements)
-    pub maximum: Option<u32>,   // The maximum size of the table (optional, as it might be unbounded)
+// Struct to represent an import entry
+struct ImportEntry {
+    module_name: String,  // the module name
+    import_name: String,  // the name of the import
+    descriptor: ImportDescriptor,  // the import descriptor
 }
 
-pub struct TableImportInfo {
-    pub module_name: String,    // The name of the module from which the table is imported
-    pub import_name: String,    // The name of the imported table
-    pub table_type: TableType,  // Information about the type and size characteristics of the table
-    // Additional fields as needed, such as documentation, etc.
+// Further structs for TableType, MemoryType, GlobalType might be needed
+// based on what they specifically include in the Wasm spec.
+
+
+// Assuming you have a byte buffer `bytes` for the wasm binary
+
+fn parse_import_section(bytes: &[u8]) -> Result<Vec<ImportEntry>, &'static str> {
+    // Assuming you have functions to read names and descriptors,
+    // and you're at the point in the buffer where the import section starts
+
+    let mut imports = Vec::new();
+
+    // Read the number of imports (usually a variable-length integer)
+    let import_count = read_varuint32(
+        &mut bytes)?;
+
+    for _ in 0..import_count {
+        let module_name = read_name(&mut bytes)?;  // Read the module name
+        let import_name = read_name(&mut bytes)?;  // Read the import name
+        let desc_byte = bytes.next();              // Read the descriptor byte
+
+        // Determine the type of import and read its index or type
+        let desc = match desc_byte {
+            0x00 => ImportDescriptor::Function(read_varuint32(&mut bytes)?),
+            0x01 => ImportDescriptor::Table(read_table_type(&mut bytes)?),
+            0x02 => ImportDescriptor::Memory(read_memory_type(&mut bytes)?),
+            0x03 => ImportDescriptor::Global(read_global_type(&mut bytes)?),
+            _ => return Err("Unknown import descriptor type"),
+        };
+
+        imports.push(ImportEntry {
+            module: module_name,
+            name: import_name,
+            desc,
+        });
+    }
+
+    Ok(imports)
 }
