@@ -9,6 +9,22 @@ numtype
     | NUMTYPE_F64    # NumtypeF64
     ;
 
+vectype
+    : VECTYPE_V128   # VectypeV128
+    ;
+
+
+reftype
+    : REFTYPE_FUNCREF     # ReftypeFuncref
+    | REFTYPE_EXTERNREF   # ReftypeExternref
+    ;
+
+valtype
+    : numtype             # ValtypeNumtype
+    | vectype             # ValtypeVectype
+    | reftype             # ValtypeReftype
+    ;
+
 limits
     : LIMITS_TYPE0 U32                  # LimitsMin
     | LIMITS_TYPE1 U32 U32              # LimitsMinMax
